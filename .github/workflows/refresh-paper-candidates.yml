@@ -1,0 +1,47 @@
+# Publish just a small, fresh candidate feed for the always-on Oracle scanner.
+# Does NOT build or deploy the website and does NOT change flip maths.
+name: Refresh paper-trading candidates
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '8,38 * * * *'
+permissions:
+  contents: write
+concurrency:
+  group: paper-candidates
+  cancel-in-progress: true
+jobs:
+  candidates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: true
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @bc/shared --filter @bc/server-core build
+      - name: Compute candidates from recent market history
+        run: node --max-old-space-size=4096 scripts/data/build-paper-candidates.mjs --hours 48 --out data/paper-candidates.json
+      - name: Commit candidate feed without touching market recordings
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/paper-candidates.json
+          if git diff --cached --quiet; then
+            echo 'No candidate changes'
+            exit 0
+          fi
+          git commit -m 'Refresh paper-trading candidates'
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then exit 0; fi
+            echo "Push conflict; rebasing attempt ${attempt}"
+            git fetch origin main
+            git rebase origin/main
+          done
+          echo 'Could not publish candidate feed after five attempts'
+          exit 1
