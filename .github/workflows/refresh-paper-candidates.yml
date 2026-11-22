@@ -1,10 +1,16 @@
 # Publish just a small, fresh candidate feed for the always-on Oracle scanner.
 # Does NOT build or deploy the website and does NOT change flip maths.
 name: Refresh paper-trading candidates
+
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'data/contrib/**/*.json.gz'
   schedule:
     - cron: '8,38 * * * *'
+
 permissions:
   contents: write
 concurrency:
